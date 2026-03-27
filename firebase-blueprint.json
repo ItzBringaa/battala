@@ -1,0 +1,109 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "User profile for workers and companies",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["worker", "company"] },
+        "phone": { "type": "string" },
+        "companyName": { "type": "string" },
+        "rating": { "type": "number" },
+        "reviewCount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "name", "role", "phone"]
+    },
+    "Job": {
+      "title": "Job",
+      "description": "Construction job listing",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "companyId": { "type": "string" },
+        "companyName": { "type": "string" },
+        "category": { "type": "string" },
+        "wage": { "type": "number" },
+        "needed": { "type": "number" },
+        "hired": { "type": "number" },
+        "duration": { "type": "number" },
+        "location": { "type": "string" },
+        "desc": { "type": "string" },
+        "status": { "type": "string", "enum": ["open", "full", "completed"] },
+        "postedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "companyId", "companyName", "wage", "needed", "duration", "location", "status"]
+    },
+    "Application": {
+      "title": "Application",
+      "description": "Worker application for a job",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "jobId": { "type": "string" },
+        "workerId": { "type": "string" },
+        "workerName": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "rejected"] },
+        "appliedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["jobId", "workerId", "workerName", "status"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "Review for a worker or company",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fromId": { "type": "string" },
+        "toId": { "type": "string" },
+        "jobId": { "type": "string" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["fromId", "toId", "jobId", "rating"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Payment transaction record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "jobId": { "type": "string" },
+        "workerId": { "type": "string" },
+        "companyId": { "type": "string" },
+        "amount": { "type": "number" },
+        "workerFee": { "type": "number" },
+        "companyFee": { "type": "number" },
+        "netWorker": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["jobId", "workerId", "companyId", "amount", "workerFee", "companyFee", "netWorker"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "UserProfile",
+      "description": "User profiles"
+    },
+    "/jobs/{jobId}": {
+      "schema": "Job",
+      "description": "Job listings"
+    },
+    "/applications/{appId}": {
+      "schema": "Application",
+      "description": "Job applications"
+    },
+    "/reviews/{reviewId}": {
+      "schema": "Review",
+      "description": "Reviews"
+    },
+    "/payments/{paymentId}": {
+      "schema": "Payment",
+      "description": "Payment transactions"
+    }
+  }
+}

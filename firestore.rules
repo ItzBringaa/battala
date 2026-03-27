@@ -1,0 +1,174 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: uid
+    // Fields:
+    //   - uid: string (required, immutable)
+    //   - name: string (required, minLen 2, maxLen 50)
+    //   - role: string (required, enum: ["worker", "company"])
+    //   - phone: string (required, regex)
+    //   - companyName: string (optional, maxLen 100)
+    //   - rating: number (optional, min 0, max 5)
+    //   - reviewCount: number (optional, min 0)
+    //   - createdAt: timestamp (required, immutable)
+    //
+    // Collection: jobs
+    // Document ID: jobId
+    // Fields:
+    //   - id: string (required)
+    //   - title: string (required, maxLen 100)
+    //   - companyId: string (required, immutable)
+    //   - companyName: string (required)
+    //   - category: string (required)
+    //   - wage: number (required, positive)
+    //   - needed: number (required, positive)
+    //   - hired: number (required, min 0)
+    //   - duration: number (required, positive)
+    //   - location: string (required)
+    //   - desc: string (required, maxLen 1000)
+    //   - status: string (required, enum: ["open", "full", "completed"])
+    //   - postedAt: timestamp (required, immutable)
+    //
+    // Collection: applications
+    // Document ID: appId
+    // Fields:
+    //   - id: string (required)
+    //   - jobId: string (required, immutable)
+    //   - workerId: string (required, immutable)
+    //   - workerName: string (required)
+    //   - status: string (required, enum: ["pending", "accepted", "rejected"])
+    //   - appliedAt: timestamp (required, immutable)
+    //
+    // Collection: reviews
+    // Document ID: reviewId
+    // Fields:
+    //   - id: string (required)
+    //   - fromId: string (required, immutable)
+    //   - toId: string (required, immutable)
+    //   - jobId: string (required, immutable)
+    //   - rating: number (required, min 1, max 5)
+    //   - comment: string (optional, maxLen 500)
+    //   - createdAt: timestamp (required, immutable)
+    //
+    // Collection: payments
+    // Document ID: paymentId
+    // Fields:
+    //   - id: string (required)
+    //   - jobId: string (required, immutable)
+    //   - workerId: string (required, immutable)
+    //   - companyId: string (required, immutable)
+    //   - amount: number (required, positive)
+    //   - workerFee: number (required, positive)
+    //   - companyFee: number (required, positive)
+    //   - netWorker: number (required, positive)
+    //   - createdAt: timestamp (required, immutable)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.uid;
+    }
+    
+    function isCompany() {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'company';
+    }
+    
+    function isWorker() {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'worker';
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         (request.auth.token.email == "hellolilup@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'name', 'role', 'phone', 'createdAt']) &&
+             data.uid == request.auth.uid &&
+             data.name is string && data.name.size() >= 2 && data.name.size() <= 50 &&
+             data.role in ['worker', 'company'] &&
+             data.phone is string && data.phone.size() >= 8 && data.phone.size() <= 15;
+    }
+
+    function isValidJob(data) {
+      return data.keys().hasAll(['title', 'companyId', 'companyName', 'wage', 'needed', 'duration', 'location', 'status', 'postedAt']) &&
+             data.companyId == request.auth.uid &&
+             data.title is string && data.title.size() <= 100 &&
+             data.wage is number && data.wage > 0 &&
+             data.needed is number && data.needed > 0 &&
+             data.status in ['open', 'full', 'completed'];
+    }
+
+    function isValidApplication(data) {
+      return data.keys().hasAll(['jobId', 'workerId', 'workerName', 'status', 'appliedAt']) &&
+             data.workerId == request.auth.uid &&
+             data.status in ['pending', 'accepted', 'rejected'];
+    }
+
+    function isValidReview(data) {
+      return data.keys().hasAll(['fromId', 'toId', 'jobId', 'rating', 'createdAt']) &&
+             data.fromId == request.auth.uid &&
+             data.rating is number && data.rating >= 1 && data.rating <= 5;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{uid} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidUser(request.resource.data);
+      allow update: if isOwner(uid) && 
+                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'phone', 'companyName', 'rating', 'reviewCount']) &&
+                      (request.resource.data.rating == resource.data.rating || isAdmin());
+    }
+
+    match /jobs/{jobId} {
+      allow read: if isAuthenticated();
+      allow create: if isCompany() && isValidJob(request.resource.data);
+      allow update: if isAuthenticated() && (
+        (isOwner(resource.data.companyId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'desc', 'status', 'needed', 'hired', 'location'])) ||
+        (isWorker() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hired']) && request.resource.data.hired == resource.data.hired + 1)
+      );
+      allow delete: if isOwner(resource.data.companyId);
+    }
+
+    match /applications/{appId} {
+      allow read: if isAuthenticated() && (isOwner(resource.data.workerId) || isOwner(get(/databases/$(database)/documents/jobs/$(resource.data.jobId)).data.companyId));
+      allow create: if isWorker() && isValidApplication(request.resource.data);
+      allow update: if isAuthenticated() && (
+        (isOwner(resource.data.workerId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']) && request.resource.data.status == 'cancelled') ||
+        (isOwner(get(/databases/$(database)/documents/jobs/$(resource.data.jobId)).data.companyId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']))
+      );
+    }
+
+    match /reviews/{reviewId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidReview(request.resource.data);
+    }
+
+    match /payments/{paymentId} {
+      allow read: if isAuthenticated() && (isOwner(resource.data.workerId) || isOwner(resource.data.companyId) || isAdmin());
+      allow create: if isAdmin() || isCompany(); // Simplified for demo, usually server-side
+    }
+  }
+}
